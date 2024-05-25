@@ -1,5 +1,5 @@
 const mysql = require('mysql2/promise');
-// import { config } from '../config.js';
+const config = require('../config.js');
 
 const conn = {};
 
@@ -7,22 +7,13 @@ var connDB = {}
 
 conn.getConnection = async() => {
 
-    // const connection = mysql.createConnection({
-    //     host: config.dbHost,
-    //     user: config.dbUser,
-    //     password: config.dbPassword,
-    //     database: config.dbName,
-    //     port: config.dbPort
-    // })
-
     connDB = await mysql.createConnection({
-        host: 'localhost',
-        user: 'root',
-        password: 'root',
-        database: 'db_brokers',
-        port: '3306'
+        host: config.dbHost,
+        user: config.dbUser,
+        password: config.dbPassword,
+        database: config.dbName,
+        port: config.dbPort
     })
-
 
 }
 

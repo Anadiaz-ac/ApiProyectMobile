@@ -6,7 +6,7 @@ const router = Router();
 router.post('/validateUser', controller.validateUser);
 router.post('/createUser', controller.createUser);
 router.get('/getCountries', controller.getCountries);
-// router.post('/buy', controller.buy);
-// router.post('/sell', controller.sell);
+router.post('/buy', controller.buy);
+router.post('/sell', controller.sell);
 
 module.exports = router;

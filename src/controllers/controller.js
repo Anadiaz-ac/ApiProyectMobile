@@ -1,15 +1,17 @@
 const mysql = require('../database/database.js');
+const moment = require('moment');
 let controller = {}
 
 mysql.getConnection();
 
 controller.validateUser = async (req, res) => {
     let data = req.body;
-    if (data.email && data.email.length > 0 && data.password && data.password.length > 0) {
-        let query = `SELECT * FROM users WHERE email = '${data.email.trim()}' AND password = '${data.email.trim()}'`;  
+    console.log(data);
+    if (data.correo && data.correo.toString().trim()!="" && data.clave && data.clave.toString().trim()!="") {
+        let query = `SELECT * FROM users WHERE email = '${data.correo.trim()}' AND password = '${data.clave.trim()}'`;  
         let {err, result} = await mysql.aQuery(query)   
         if (err) { return res.send({"success": false, "error": err} )}
-        if (result[0].length > 0) {
+        if (result.length > 0) {
             let dataUser = await getComplementUser(result[0])
             res.send({"success": true, "user": dataUser} ) 
         }
@@ -28,21 +30,25 @@ const getComplementUser = async(user) =>{
     SELECT u.id, u.name AS nombre, u.balance AS saldo, c.description AS pais, c.id AS id_pais, u.email AS correo
     FROM users u
     LEFT JOIN country c ON c.id = u.country_origin
-    WHERE u.id = ${user[0].id}`;  
+    WHERE u.id = ${user.id}`;  
     
     let {err, result} = await mysql.aQuery(query)  
     if (err) { return {} }
     if (result.length == 0) {  return {} }
+    let coins = await getCountryUser(result[0].id_pais)
+    let history = await getHistoryUser(result[0].id)
+    result[0].coins = coins
+    result[0].history = history
     return result[0]
 }
 
 controller.createUser = async (req, res) => {
     let data = req.body;
-    console.log(data);
-    if (data.email && data.email.length > 0 && data.password && data.password.length > 0 && data.name && data.name.length > 0) {
+   
+    if (data.correo && data.correo.toString().trim()!="" && data.clave && data.clave.toString().trim()!="" && data.nombre && data.nombre.toString().trim()!="") {
         let query = `
         INSERT INTO users (name, country_origin, balance, email, password)
-        VALUES ('${data.name.trim()}', ${data.country_origin || 1}, ${data.balance || 0}, '${data.email.trim()}', '${data.password.trim()}')`;  
+        VALUES ('${data.nombre.trim()}', ${data.pais || 1}, ${data.saldo || 0}, '${data.correo.trim()}', '${data.clave.trim()}')`;  
 
         let {err, result} = await mysql.aQuery(query)   
         if (err) { return res.send({"success": false, "error": err} )}
@@ -53,42 +59,131 @@ controller.createUser = async (req, res) => {
     }
 }
 
-controller.getCountries = async (req, res) => {
+const getCountryUser = async (id_country) => {
 
-    let query = `SELECT * FROM country`;  
+    let query = `SELECT * FROM country_coins WHERE id_country = ${id_country}`;  
     let {err, result} = await mysql.aQuery(query)   
-    let query2 = `SELECT * FROM country_coins`;  
-    let {err2, result2} = await mysql.aQuery(query2)   
-    if (err || err2) { return res.send({"success": false, "error": err} || err2 )}
-   
-    let countries = result
-    let coins = result2
-    let dataSend = []
-    for (let i = 0; i < countries.length; i++) {
-        let coin_filter = coins.filter(e => e.id_country == countries[i].id)
-        dataSend.push({
-            "id": countries[i].id,
-            "pais": countries[i].description,
-            "monedas": coin_filter,
-        })
-    }
-    res.send({"success": true, "paises": dataSend} )          
+    if (err) { return []}
+    return result    
 }
 
+
+const getHistoryUser = async (id_user) => {
+
+    let query = `
+    SELECT u.id, u.id_country AS id_pais, u.action AS id_accion, 
+    CASE
+        WHEN u.action = 1 THEN "Compra"
+        ELSE "Venta"
+    END descripcion_accion, u.amount_coin AS valor_accion, u.id_coin_action AS id_moneda, cc.description AS nombre_moneda, date AS fecha_accion 
+    FROM user_history u 
+    LEFT JOIN country_coins cc ON cc.id = u.id_coin_action 
+    WHERE id_user = ${id_user}`;  
+
+    let {err, result} = await mysql.aQuery(query)   
+    if (err) { return []}
+    return result    
+
+}
+
+
+controller.getCountries = async (req, res) => {
+
+    let query = `SELECT id AS id_pais, description AS nombre_pais, code as codigo_pais FROM country`;  
+    let {err, result} = await mysql.aQuery(query)   
+    if (err) { res.send({"success": false, "error": err, "data": []} )}
+    res.send({"success": true, "error": "", "data": result} )
+}
 
 
 controller.buy = async (req, res) => {
     let data = req.body;
-    console.log(data);
-    if (data.email && data.email.length > 0 && data.password && data.password.length > 0 && data.name && data.name.length > 0) {
+   
+    if (data.id_moneda && data.id_moneda.toString().trim()!="" && data.id_usuario && data.id_usuario.toString().trim()!="") {
+        let date = moment().format("YYYY-MM-DD HH:mm:ss")
         let query = `
-        INSERT INTO user_history (id_user, id_country, action, coin_action, date)
-        VALUES ('${data.name.trim()}', ${data.country_origin || 1}, ${data.balance || 0}, '${data.email.trim()}', '${data.password.trim()}')`;  
+        INSERT INTO user_history (id_user, id_country, action, amount_coin, id_coin_action, date)
+        VALUES (${data.id_usuario}, ${data.id_pais || 1}, 1, ${data.cantidad}, ${data.id_moneda}, '${date}')`;  
 
         let {err, result} = await mysql.aQuery(query)   
         if (err) { return res.send({"success": false, "error": err} )}
-        res.send({"success": true, "msg": "Usuario Creado con exito"} )          
+        let newBalance = await updateBalanceUser(1, data.id_usuario, data.cantidad, data.id_moneda)
+        return res.send({"success": true, "msg": "", "balance": newBalance} )          
     }
+    return res.send({"success": false, "error": "Datos Incorrectos"} ) 
+}
+
+controller.sell = async (req, res) => {
+    let data = req.body;
+ 
+    if (data.id_moneda && data.id_moneda.toString().trim()!="" && data.id_usuario && data.id_usuario.toString().trim()!="") {
+        let date = moment().format("YYYY-MM-DD HH:mm:ss")
+        let query = `
+        INSERT INTO user_history (id_user, id_country, action, amount_coin, id_coin_action, date)
+        VALUES (${data.id_usuario}, ${data.id_pais || 1}, 2, ${data.cantidad}, ${data.id_moneda}, '${date}')`;  
+
+        let {err, result} = await mysql.aQuery(query)   
+        if (err) { return res.send({"success": false, "error": err} )}
+        let newBalance = await updateBalanceUser(2, data.id_usuario, data.cantidad, data.id_moneda)
+        return res.send({"success": true, "error": "", "balance": newBalance} )          
+    }
+    return res.send({"success": false, "error": "Datos Incorrectos"} )    
+}
+
+const updateBalanceUser = async(type, id_user, amount, id_coin) => {
+
+    let balance = await getBalanceUser(id_user)
+    balance = Number(balance)
+    let price = await getEquivalentPrice(id_coin)
+    let total = Number(price) * Number(amount)
+
+    if (balance > 0 && balance >= total) {
+        let newBalance = 0 
+        if (type == 1) {
+            newBalance = balance - total
+        }
+        else{
+            newBalance = balance + total
+        }
+      
+        let query = `
+            UPDATE users 
+            SET balance = ${newBalance}
+            WHERE id = ${id_user} `;
+
+        let {err, result} = await mysql.aQuery(query)  
+        if (err) { return balance }
+        return newBalance
+    }
+}
+
+
+const getBalanceUser = async(id_user) => {
+
+    let query = `
+        SELECT balance
+        FROM users 
+        WHERE id = ${id_user}`;  
+    
+    let {err, result} = await mysql.aQuery(query)  
+    if (err) { return 0 }
+    if (result.length == 0) { return 0 }
+    return result[0].balance
+
+}
+
+const getEquivalentPrice = async(id_coin) => {
+
+    let query = `
+        SELECT price_equivalent
+        FROM country_coins 
+        WHERE id = ${id_coin}`;  
+    
+    let {err, result} = await mysql.aQuery(query)  
+    if (err) { return 0 }
+    if (result.length == 0) { return 0 }
+    return result[0].price_equivalent
+
 }
 
 
