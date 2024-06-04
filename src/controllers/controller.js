@@ -6,7 +6,7 @@ mysql.getConnection();
 
 controller.validateUser = async (req, res) => {
     let data = req.body;
-    console.log(data);
+
     if (data.correo && data.correo.toString().trim()!="" && data.clave && data.clave.toString().trim()!="") {
         let query = `SELECT * FROM users WHERE email = '${data.correo.trim()}' AND password = '${data.clave.trim()}'`;  
         let {err, result} = await mysql.aQuery(query)   
@@ -39,8 +39,40 @@ const getComplementUser = async(user) =>{
     let history = await getHistoryUser(result[0].id)
     result[0].coins = coins
     result[0].history = history
+    result[0].totalCoin = []
+    let groupCoins = groupBy(history, 'nombre_moneda');
+
+    for (const coin in groupCoins) {
+        let total = 0
+        for (let j = 0; j < groupCoins[coin].length; j++) {
+            if (groupCoins[coin][j].id_accion == "1") {
+                total = total + groupCoins[coin][j].valor_accion
+            }
+            else{
+                total = total - groupCoins[coin][j].valor_accion
+            }
+        }
+        result[0].totalCoin.push({
+            "nombre_moneda": coin,
+            "id_moneda": groupCoins[coin][0].id_moneda,
+            "cantidad": total
+        })     
+    }
+    console.log(groupCoins);
+  
     return result[0]
 }
+
+const groupBy = (arr, key) => {
+    return arr.reduce((acc, item) => {
+        const keyValue = item[key];
+        if (!acc[keyValue]) {
+            acc[keyValue] = [];
+        }
+        acc[keyValue].push(item);
+        return acc;
+    }, {});
+};
 
 controller.createUser = async (req, res) => {
     let data = req.body;
