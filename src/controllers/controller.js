@@ -162,6 +162,39 @@ controller.sell = async (req, res) => {
     return res.send({"success": false, "error": "Datos Incorrectos"} )    
 }
 
+controller.getCoinsUser = async (req, res) => {
+    let id_user = req.params.id_user;
+ 
+    if (id_user && id_user.toString().trim()!="" ) {
+
+        let history = await getHistoryUser(id_user)
+        let groupCoins = groupBy(history, 'nombre_moneda');
+        let coins = []
+    
+        for (const coin in groupCoins) {
+            let total = 0
+            for (let j = 0; j < groupCoins[coin].length; j++) {
+                if (groupCoins[coin][j].id_accion == "1") {
+                    total = total + groupCoins[coin][j].valor_accion
+                }
+                else{
+                    total = total - groupCoins[coin][j].valor_accion
+                }
+            }
+            coins.push({
+                "nombre_moneda": coin,
+                "id_moneda": groupCoins[coin][0].id_moneda,
+                "cantidad": total
+            })     
+        }
+
+        return res.send({"success": true, "error": "", "data": coins} )          
+    }
+    return res.send({"success": false, "error": "Datos Incorrectos"} )    
+}
+
+
+
 const updateBalanceUser = async(type, id_user, amount, id_coin) => {
 
     let balance = await getBalanceUser(id_user)
